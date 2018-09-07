@@ -58,15 +58,19 @@ class AmqpContextManager implements ContextManager
         }
 
         $topic = $this->psrContext->createTopic($destination['topic']);
-        $topic->setType(AmqpTopic::TYPE_FANOUT);
-        $topic->addFlag(AmqpTopic::FLAG_DURABLE);
+        $topic->setType($destination['topicOptions']['type'] ?? AmqpTopic::TYPE_FANOUT);
+        $topicFlags = $destination['topicOptions']['flags'] ?? ((int) $topic->getFlags() | AmqpTopic::FLAG_DURABLE);
+        $topic->setFlags($topicFlags);
         $this->psrContext->declareTopic($topic);
 
         $queue = $this->psrContext->createQueue($destination['queue']);
-        $queue->addFlag(AmqpQueue::FLAG_DURABLE);
+        $queueFlags = $destination['queueOptions']['flags'] ?? ((int) $queue->getFlags() | AmqpQueue::FLAG_DURABLE);
+        $queue->setFlags($queueFlags);
         $this->psrContext->declareQueue($queue);
 
-        $this->psrContext->bind(new AmqpBind($queue, $topic));
+        $this->psrContext->bind(
+            new AmqpBind($queue, $topic, $destination['queueOptions']['bindingKey'] ?? null)
+        );
 
         return true;
     }

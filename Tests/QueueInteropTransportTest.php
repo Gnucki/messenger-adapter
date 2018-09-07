@@ -28,6 +28,8 @@ use Enqueue\MessengerAdapter\ContextManager;
 use Enqueue\MessengerAdapter\EnvelopeItem\TransportConfiguration;
 use Interop\Queue\Exception;
 use Symfony\Component\Messenger\Transport\Serialization\DecoderInterface;
+use Enqueue\MessengerAdapter\Exception\MissingMessageMetadataSetterException;
+use Enqueue\MessengerAdapter\Tests\Fixtures\DecoratedPsrMessage;
 
 class QueueInteropTransportTest extends TestCase
 {
@@ -65,7 +67,12 @@ class QueueInteropTransportTest extends TestCase
 
         $contextManagerProphecy = $this->prophesize(ContextManager::class);
         $contextManagerProphecy->psrContext()->shouldBeCalled()->willReturn($psrContextProphecy->reveal());
-        $contextManagerProphecy->ensureExists(array('topic' => $topic, 'queue' => $queue))->shouldBeCalled();
+        $contextManagerProphecy->ensureExists(array(
+            'topic' => $topic,
+            'topicOptions' => array('name' => $topic),
+            'queue' => $queue,
+            'queueOptions' => array('name' => $queue),
+        ))->shouldBeCalled();
 
         $encoderProphecy = $this->prophesize(EncoderInterface::class);
         $encoderProphecy->encode($envelope)->shouldBeCalled()->willReturn(array('body' => 'foo'));
@@ -154,7 +161,12 @@ class QueueInteropTransportTest extends TestCase
 
         $contextManagerProphecy = $this->prophesize(ContextManager::class);
         $contextManagerProphecy->psrContext()->shouldBeCalled()->willReturn($psrContextProphecy->reveal());
-        $contextManagerProphecy->ensureExists(array('topic' => $specificTopic, 'queue' => $queue))->shouldBeCalled();
+        $contextManagerProphecy->ensureExists(array(
+            'topic' => $specificTopic,
+            'topicOptions' => array('name' => $topic),
+            'queue' => $queue,
+            'queueOptions' => array('name' => $queue),
+        ))->shouldBeCalled();
 
         $encoderProphecy = $this->prophesize(EncoderInterface::class);
         $encoderProphecy->encode($envelope)->shouldBeCalled()->willReturn(array('body' => 'foo'));
@@ -166,6 +178,151 @@ class QueueInteropTransportTest extends TestCase
             array(
                 'topic' => array('name' => $topic),
                 'queue' => array('name' => $queue),
+            ),
+            true
+        );
+
+        $transport->send($envelope);
+    }
+
+    public function testSendWithQueueAndTopicSpecificOptions()
+    {
+        $topic = 'topic';
+        $queue = 'queue';
+        $message = new \stdClass();
+        $message->foo = 'bar';
+        $envelope = new Envelope($message);
+
+        $psrMessageProphecy = $this->prophesize(PsrMessage::class);
+        $psrMessage = $psrMessageProphecy->reveal();
+        $topicProphecy = $this->prophesize(PsrDestination::class);
+        $psrTopic = $topicProphecy->reveal();
+
+        $producerProphecy = $this->prophesize(PsrProducer::class);
+        $producerProphecy->send($psrTopic, $psrMessage)->shouldBeCalled();
+
+        $psrContextProphecy = $this->prophesize(PsrContext::class);
+        $psrContextProphecy->createTopic($topic)->shouldBeCalled()->willReturn($psrTopic);
+        $psrContextProphecy->createProducer()->shouldBeCalled()->willReturn($producerProphecy->reveal());
+        $psrContextProphecy->createMessage('foo', array(), array())->shouldBeCalled()->willReturn($psrMessage);
+
+        $contextManagerProphecy = $this->prophesize(ContextManager::class);
+        $contextManagerProphecy->psrContext()->shouldBeCalled()->willReturn($psrContextProphecy->reveal());
+        $contextManagerProphecy->ensureExists(array(
+            'topic' => $topic,
+            'topicOptions' => array('name' => $topic, 'foo' => 'bar'),
+            'queue' => $queue,
+            'queueOptions' => array('name' => $queue, 'bar' => 'foo'),
+        ))->shouldBeCalled();
+
+        $encoderProphecy = $this->prophesize(EncoderInterface::class);
+        $encoderProphecy->encode($envelope)->shouldBeCalled()->willReturn(array('body' => 'foo'));
+
+        $transport = $this->getTransport(
+            null,
+            $encoderProphecy->reveal(),
+            $contextManagerProphecy->reveal(),
+            array(
+                'topic' => array('name' => $topic, 'foo' => 'bar'),
+                'queue' => array('name' => $queue, 'bar' => 'foo'),
+            ),
+            true
+        );
+
+        $transport->send($envelope);
+    }
+
+    public function testSendWithMessageMetadata()
+    {
+        $topic = 'topic';
+        $queue = 'queue';
+        $message = new \stdClass();
+        $message->foo = 'bar';
+        $envelope = (new Envelope($message))->with(new TransportConfiguration(array(
+            'metadata' => array('routingKey' => 'foo.bar')
+        )));
+
+        $psrMessageProphecy = $this->prophesize(DecoratedPsrMessage::class);
+        $psrMessageProphecy->setRoutingKey('foo.bar')->shouldBeCalled();
+        $psrMessage = $psrMessageProphecy->reveal();
+        $topicProphecy = $this->prophesize(PsrDestination::class);
+        $psrTopic = $topicProphecy->reveal();
+
+        $producerProphecy = $this->prophesize(PsrProducer::class);
+        $producerProphecy->send($psrTopic, $psrMessage)->shouldBeCalled();
+
+        $psrContextProphecy = $this->prophesize(PsrContext::class);
+        $psrContextProphecy->createTopic($topic)->shouldBeCalled()->willReturn($psrTopic);
+        $psrContextProphecy->createProducer()->shouldBeCalled()->willReturn($producerProphecy->reveal());
+        $psrContextProphecy->createMessage('foo', array(), array())->shouldBeCalled()->willReturn($psrMessage);
+
+        $contextManagerProphecy = $this->prophesize(ContextManager::class);
+        $contextManagerProphecy->psrContext()->shouldBeCalled()->willReturn($psrContextProphecy->reveal());
+        $contextManagerProphecy->ensureExists(array(
+            'topic' => $topic,
+            'topicOptions' => array('name' => $topic, 'foo' => 'bar'),
+            'queue' => $queue,
+            'queueOptions' => array('name' => $queue, 'bar' => 'foo'),
+        ))->shouldBeCalled();
+
+        $encoderProphecy = $this->prophesize(EncoderInterface::class);
+        $encoderProphecy->encode($envelope)->shouldBeCalled()->willReturn(array('body' => 'foo'));
+
+        $transport = $this->getTransport(
+            null,
+            $encoderProphecy->reveal(),
+            $contextManagerProphecy->reveal(),
+            array(
+                'topic' => array('name' => $topic, 'foo' => 'bar'),
+                'queue' => array('name' => $queue, 'bar' => 'foo'),
+            ),
+            true
+        );
+
+        $transport->send($envelope);
+    }
+
+    public function testSendWithBadMessageMetadata()
+    {
+        $this->expectException(MissingMessageMetadataSetterException::class);
+        $this->expectExceptionMessageRegExp('/Missing "setDumb" setter for "dumb" metadata key in "Double\\\Enqueue\\\MessengerAdapter\\\Tests\\\Fixtures\\\DecoratedPsrMessage\\\[^"]+" class/');
+
+        $topic = 'topic';
+        $queue = 'queue';
+        $message = new \stdClass();
+        $message->foo = 'bar';
+        $envelope = (new Envelope($message))->with(new TransportConfiguration(array(
+            'metadata' => array('dumb' => 'foo.bar')
+        )));
+
+        $psrMessageProphecy = $this->prophesize(DecoratedPsrMessage::class);
+        $psrMessage = $psrMessageProphecy->reveal();
+        $topicProphecy = $this->prophesize(PsrDestination::class);
+        $psrTopic = $topicProphecy->reveal();
+
+        $psrContextProphecy = $this->prophesize(PsrContext::class);
+        $psrContextProphecy->createTopic($topic)->shouldBeCalled()->willReturn($psrTopic);
+        $psrContextProphecy->createMessage('foo', array(), array())->shouldBeCalled()->willReturn($psrMessage);
+
+        $contextManagerProphecy = $this->prophesize(ContextManager::class);
+        $contextManagerProphecy->psrContext()->shouldBeCalled()->willReturn($psrContextProphecy->reveal());
+        $contextManagerProphecy->ensureExists(array(
+            'topic' => $topic,
+            'topicOptions' => array('name' => $topic, 'foo' => 'bar'),
+            'queue' => $queue,
+            'queueOptions' => array('name' => $queue, 'bar' => 'foo'),
+        ))->shouldBeCalled();
+
+        $encoderProphecy = $this->prophesize(EncoderInterface::class);
+        $encoderProphecy->encode($envelope)->shouldBeCalled()->willReturn(array('body' => 'foo'));
+
+        $transport = $this->getTransport(
+            null,
+            $encoderProphecy->reveal(),
+            $contextManagerProphecy->reveal(),
+            array(
+                'topic' => array('name' => $topic, 'foo' => 'bar'),
+                'queue' => array('name' => $queue, 'bar' => 'foo'),
             ),
             true
         );
@@ -201,7 +358,12 @@ class QueueInteropTransportTest extends TestCase
 
         $contextManagerProphecy = $this->prophesize(ContextManager::class);
         $contextManagerProphecy->psrContext()->shouldBeCalled()->willReturn($psrContextProphecy->reveal());
-        $contextManagerProphecy->recoverException($exception, array('topic' => $topic, 'queue' => $queue))->shouldBeCalled()->willReturn(false);
+        $contextManagerProphecy->recoverException($exception, array(
+            'topic' => $topic,
+            'topicOptions' => array('name' => $topic),
+            'queue' => $queue,
+            'queueOptions' => array('name' => $queue),
+        ))->shouldBeCalled()->willReturn(false);
 
         $encoderProphecy = $this->prophesize(EncoderInterface::class);
         $encoderProphecy->encode($envelope)->shouldBeCalled()->willReturn(array('body' => 'foo'));

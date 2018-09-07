@@ -28,6 +28,7 @@ final class TransportConfiguration implements EnvelopeItemInterface
     public function __construct(array $configuration)
     {
         $this->topic = $configuration['topic'] ?? null;
+        $this->metadata = $configuration['metadata'] ?? array();
     }
 
     /**
@@ -41,12 +42,23 @@ final class TransportConfiguration implements EnvelopeItemInterface
     }
 
     /**
+     * Get routing key.
+     *
+     * @return string $metadata
+     */
+    public function getMetadata()
+    {
+        return $this->metadata;
+    }
+
+    /**
      * Serialize object.
      */
     public function serialize()
     {
         return serialize(array(
             'topic' => $this->topic,
+            'metadata' => $this->metadata,
         ));
     }
 
@@ -58,9 +70,13 @@ final class TransportConfiguration implements EnvelopeItemInterface
     public function unserialize($serialized)
     {
         list(
-            'topic' => $topic
+            'topic' => $topic,
+            'metadata' => $metadata,
         ) = unserialize($serialized, array('allowed_classes' => false));
 
-        $this->__construct(array('topic' => $topic));
+        $this->__construct(array(
+            'topic' => $topic,
+            'metadata' => $metadata,
+        ));
     }
 }

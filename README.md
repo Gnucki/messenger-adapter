@@ -52,7 +52,7 @@ bin/console messenger:consume-messages amqp
 
 ### Configure the queue(s) and exchange(s)
 
-In the transport DSN, you can add extra configuration. Here is the reference DSN (note that the values are just for the example):
+In the transport DSN, you can add extra configuration. Here is the common reference DSN (note that the values are just for the example):
 
 ```
 enqueue://default
@@ -69,6 +69,7 @@ enqueue://default
 
 You can send a message on a specific topic using `TransportConfiguration` envelope item with your message:
 ```php
+use Symfony\Component\Messenger\Envelope;
 use Enqueue\MessengerAdapter\EnvelopeItem\TransportConfiguration;
 
 // ...
@@ -76,4 +77,32 @@ use Enqueue\MessengerAdapter\EnvelopeItem\TransportConfiguration;
 $this->bus->dispatch((new Envelope($message))->with(new TransportConfiguration(
     ['topic' => 'specific-topic']
 )));
+```
+
+### Use AMQP topic exchange
+
+See https://www.rabbitmq.com/tutorials/tutorial-five-php.html
+
+You can use specific topic and queue options to configure your AMQP exchange in `topic` mode and bind it:
+```
+enqueue://default
+    ?queue[name]=queue_name
+    &queue[bindingKey]=foo.#
+    &topic[name]=topic_name
+    &topic[type]=topic
+    &deliveryDelay=1800
+    &delayStrategy=Enqueue\AmqpTools\RabbitMqDelayPluginDelayStrategy
+    &timeToLive=3600
+    &receiveTimeout=1000
+    &priority=1
+```
+
+Here is the way to send a message with a routing key matching this consumer:
+```php
+$this->bus->dispatch((new Envelope($message))->with(new TransportConfiguration([
+    'topic' => 'topic_name',
+    'metadata' => [
+        'routingKey' => 'foo.bar'
+    ]
+])));
 ```
